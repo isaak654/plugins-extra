@@ -1,0 +1,74 @@
+name: CI
+
+# Manual workflow
+on: workflow_dispatch
+
+env:
+  # Path to the solution file relative to the root of the project.
+  SOLUTION_FILE_PATH: .
+
+  # Configuration type to build.
+  # You can convert this to a build matrix if you need coverage of multiple configuration types.
+  # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build:
+     runs-on: windows-latest
+     strategy:
+       matrix:
+         platform:
+          - Win32
+          - x64
+
+     steps:
+     - uses: actions/checkout@v2
+       with:
+        # Repository name with owner. For example, actions/checkout
+        # Default: ${{ github.repository }}
+        repository: 'processhacker/processhacker'
+
+     - name: Set EnableSafeDefaultPlugins to zero for non-default plugins
+       shell: bash
+       # Source: https://stackoverflow.com/a/33762001
+       run: git ls-files ProcessHacker/settings.c | xargs sed -i -e 's/L"EnableSafeDefaultPlugins", L"1"/L"EnableSafeDefaultPlugins", L"0"/g'
+
+     - name: Add MSBuild to PATH
+       uses: microsoft/setup-msbuild@v1.0.2
+
+     - name: Run build_release.cmd
+       run: build\build_release.cmd
+
+     - name: Clone plugins-extra
+       #working-directory: .
+       run: |
+        git clone https://github.com/isaak654/plugins-extra
+
+     - name: Build plugins-extra
+       #working-directory: ${{ github.repository }}
+       # Add additional options to the MSBuild command line here (like platform or verbosity level).
+       # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
+       run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} /p:Platform=${{ matrix.platform }} plugins-extra\ExtraPlugins.sln
+
+     - name: Run build_release.cmd again
+       run: build\build_release.cmd       
+
+     - name: Upload Win32 binaries
+       uses: actions/upload-artifact@v2
+       with:
+          name: Release32
+          path: |
+            bin/Release32/*
+            bin/COPYRIGHT.txt
+            bin/LICENSE.txt
+            bin/README.txt
+
+     - name: Upload x64 binaries
+       uses: actions/upload-artifact@v2
+       with:
+          name: Release64
+          path: |
+            bin/Release64/*
+            bin/COPYRIGHT.txt
+            bin/LICENSE.txt
+            bin/README.txt
